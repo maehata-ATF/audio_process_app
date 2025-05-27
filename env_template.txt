@@ -1,0 +1,11 @@
+# OpenAI API設定
+OPENAI_API_KEY=your-openai-api-key-here
+
+# Whisperモデル設定（オプション）
+WHISPER_MODEL=base  # tiny, base, small, medium, large
+
+# GPTモデル設定（オプション）
+GPT_MODEL=gpt-3.5-turbo
+
+# ログレベル設定（オプション）
+LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR
