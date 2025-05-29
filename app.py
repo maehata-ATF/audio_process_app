@@ -128,14 +128,18 @@ def chat_interface(context_data: dict, model: str):
     # チャット履歴表示
     display_chat_history()
 
+    # チャット入力フィールドのリセット用カウンター
+    if 'chat_input_counter' not in st.session_state:
+        st.session_state.chat_input_counter = 0
+
     # チャット入力
     col1, col2 = st.columns([4, 1])
 
     with col1:
         user_input = st.text_input(
-            "質問を入力してください:",
+            label="質問を入力してください:",
             placeholder="例: この会議の最も重要な決定事項は何ですか？",
-            key="chat_input"
+            key=f"chat_input_{st.session_state.chat_input_counter}"
         )
 
     with col2:
@@ -162,8 +166,8 @@ def chat_interface(context_data: dict, model: str):
             # AIの回答を履歴に追加
             add_chat_message("assistant", response)
 
-            # 入力フィールドをクリア
-            st.session_state.chat_input = ""
+            # 入力フィールドをリセットするためにカウンターを増加
+            st.session_state.chat_input_counter += 1
 
             st.rerun()
 
@@ -271,8 +275,13 @@ def meeting_summary_page():
 
         with tab1:
             st.markdown("### 📄 元の文字起こし結果")
-            st.text_area("", st.session_state.transcript,
-                         height=300, disabled=True)
+            st.text_area(
+                label="元の文字起こし内容",
+                value=st.session_state.transcript,
+                height=300,
+                disabled=True,
+                label_visibility="collapsed"
+            )
             create_download_button(
                 st.session_state.transcript,
                 f"transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
@@ -281,8 +290,13 @@ def meeting_summary_page():
 
         with tab2:
             st.markdown("### ✨ 整形済み文字起こし結果")
-            st.text_area("", st.session_state.brushed_transcript,
-                         height=300, disabled=True)
+            st.text_area(
+                label="整形済み文字起こし内容",
+                value=st.session_state.brushed_transcript,
+                height=300,
+                disabled=True,
+                label_visibility="collapsed"
+            )
             create_download_button(
                 st.session_state.brushed_transcript,
                 f"brushed_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
@@ -435,8 +449,13 @@ def interview_analysis_page():
 
         with tab1:
             st.markdown("### 📄 元の文字起こし結果")
-            st.text_area("", st.session_state.transcript,
-                         height=300, disabled=True)
+            st.text_area(
+                label="元の文字起こし内容",
+                value=st.session_state.transcript,
+                height=300,
+                disabled=True,
+                label_visibility="collapsed"
+            )
             create_download_button(
                 st.session_state.transcript,
                 f"interview_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
@@ -445,8 +464,13 @@ def interview_analysis_page():
 
         with tab2:
             st.markdown("### ✨ 整形済み文字起こし結果")
-            st.text_area("", st.session_state.brushed_transcript,
-                         height=300, disabled=True)
+            st.text_area(
+                label="整形済み文字起こし内容",
+                value=st.session_state.brushed_transcript,
+                height=300,
+                disabled=True,
+                label_visibility="collapsed"
+            )
             create_download_button(
                 st.session_state.brushed_transcript,
                 f"interview_brushed_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
