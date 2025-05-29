@@ -42,29 +42,35 @@ def display_chat_history():
         st.session_state.chat_messages = []
 
     # チャット履歴表示エリア
-    chat_container = st.container()
+    if st.session_state.chat_messages:
+        st.markdown("### 💬 チャット履歴")
 
-    with chat_container:
-        if st.session_state.chat_messages:
-            st.markdown("### 💬 チャット履歴")
+        # 履歴の統計情報を表示
+        total_messages = len(st.session_state.chat_messages)
+        user_messages = len(
+            [msg for msg in st.session_state.chat_messages if msg.get('role') == 'user'])
+        assistant_messages = len(
+            [msg for msg in st.session_state.chat_messages if msg.get('role') == 'assistant'])
 
-            for i, message in enumerate(st.session_state.chat_messages):
-                timestamp = message.get('timestamp', datetime.now())
-                role = message.get('role', 'user')
-                content = message.get('content', '')
+        st.caption(
+            f"総メッセージ数: {total_messages} (ユーザー: {user_messages}, AI: {assistant_messages})")
 
-                # タイムスタンプ表示
-                st.caption(f"{timestamp.strftime('%H:%M:%S')} - {role}")
+        # メッセージを古い順に表示（新しいものが下）
+        for i, message in enumerate(st.session_state.chat_messages):
+            role = message.get('role', 'user')
+            content = message.get('content', '')
 
-                # メッセージ内容表示
-                if role == 'user':
-                    st.markdown(f"**👤 ユーザー:** {content}")
-                else:
-                    st.markdown(f"**🤖 アシスタント:** {content}")
+            # シンプルな表示形式
+            if role == 'user':
+                st.markdown(f"{content}")
+            else:
+                st.markdown(f"**AI:** {content}")
 
-                st.divider()
-        else:
-            st.info("💡 分析完了後、こちらでチャットができます。")
+            # メッセージ間の区切り
+            if i < len(st.session_state.chat_messages) - 1:
+                st.markdown("---")
+    else:
+        st.info("💡 分析完了後、こちらでチャットができます。質問を入力してEnterキーを押すか、送信してください。")
 
 
 def add_chat_message(role: str, content: str):
@@ -83,12 +89,19 @@ def add_chat_message(role: str, content: str):
 
 def clear_chat_history():
     """チャット履歴をクリア"""
+    # UI表示用の履歴をクリア
     if 'chat_messages' in st.session_state:
         st.session_state.chat_messages = []
 
     # TextProcessorの履歴もクリア
     text_processor = get_text_processor()
     text_processor.clear_chat_history()
+
+    # チャット入力カウンターもリセット（もし存在する場合）
+    if 'chat_input_counter' in st.session_state:
+        st.session_state.chat_input_counter = 0
+
+    logger.info("全てのチャット履歴をクリアしました")
 
 
 def display_token_info(text_processor: TextProcessor, model: str):
@@ -112,6 +125,15 @@ def display_token_info(text_processor: TextProcessor, model: str):
                 history_summary['total_tokens'] / limit_tokens * 100) if limit_tokens > 0 else 0
             st.metric("使用率", f"{usage_percentage:.1f}%")
 
+        # デバッグ情報: TextProcessorの履歴詳細
+        if st.checkbox("詳細なチャット履歴を表示", key="show_detailed_history"):
+            st.markdown("#### TextProcessorのチャット履歴")
+            if text_processor.chat_history.messages:
+                for i, msg in enumerate(text_processor.chat_history.messages):
+                    st.text(f"{i+1}. [{msg.role}] {msg.content[:100]}...")
+            else:
+                st.text("TextProcessorの履歴は空です")
+
 
 def chat_interface(context_data: dict, model: str):
     """チャットインターフェース"""
@@ -128,37 +150,65 @@ def chat_interface(context_data: dict, model: str):
     # チャット履歴表示
     display_chat_history()
 
-    # チャット入力フィールドのリセット用カウンター
+    # 履歴クリアボタン
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("履歴クリア", type="secondary"):
+            clear_chat_history()
+            st.rerun()
+
+    # チャット入力用のカウンター（ウィジェットリセット用）
     if 'chat_input_counter' not in st.session_state:
         st.session_state.chat_input_counter = 0
+
+    # 送信処理用のフラグ
+    if 'pending_message' not in st.session_state:
+        st.session_state.pending_message = None
+
+    def on_chat_input_change():
+        """チャット入力の変更時に呼ばれる関数（Enterキー押下時）"""
+        current_key = f"chat_input_{st.session_state.chat_input_counter}"
+        if current_key in st.session_state and st.session_state[current_key]:
+            # メッセージを一時保存
+            st.session_state.pending_message = st.session_state[current_key]
 
     # チャット入力
     col1, col2 = st.columns([4, 1])
 
     with col1:
+        current_key = f"chat_input_{st.session_state.chat_input_counter}"
         user_input = st.text_input(
-            label="質問を入力してください:",
+            label="質問を入力してください（Enterキーで送信）:",
             placeholder="例: この会議の最も重要な決定事項は何ですか？",
-            key=f"chat_input_{st.session_state.chat_input_counter}"
+            key=current_key,
+            on_change=on_chat_input_change,
+            label_visibility="collapsed"
         )
 
     with col2:
         send_button = st.button("送信", type="primary")
-        clear_button = st.button("履歴クリア")
 
-    if clear_button:
-        clear_chat_history()
-        st.rerun()
+    # メッセージ送信処理
+    message_to_send = None
 
-    if send_button and user_input:
+    # 送信ボタンが押された場合
+    if send_button and user_input and user_input.strip():
+        message_to_send = user_input
+
+    # Enterキーが押された場合（pending_messageがある場合）
+    elif st.session_state.pending_message and st.session_state.pending_message.strip():
+        message_to_send = st.session_state.pending_message
+        st.session_state.pending_message = None  # フラグをクリア
+
+    if message_to_send:
         try:
             # ユーザーメッセージを履歴に追加
-            add_chat_message("user", user_input)
+            add_chat_message("user", message_to_send)
 
             # AIの回答を取得
             with st.spinner("回答を生成中..."):
                 response = text_processor.chat_with_context(
-                    user_message=user_input,
+                    user_message=message_to_send,
                     context_data=context_data,
                     model=model
                 )
@@ -169,11 +219,16 @@ def chat_interface(context_data: dict, model: str):
             # 入力フィールドをリセットするためにカウンターを増加
             st.session_state.chat_input_counter += 1
 
+            # pending_messageもクリア
+            st.session_state.pending_message = None
+
             st.rerun()
 
         except Exception as e:
             st.error(f"チャット処理でエラーが発生しました: {e}")
             logger.error(f"チャット処理エラー: {e}", exc_info=True)
+            # エラー時もpending_messageをクリア
+            st.session_state.pending_message = None
 
 
 def meeting_summary_page():
